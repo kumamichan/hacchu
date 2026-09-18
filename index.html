@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dulce 発注管理アプリ</title>
+<style>
+  :root{
+    --bg:#faf6f0; --card:#ffffff; --ink:#2b2420; --sub:#8a7f74;
+    --accent:#b8935a; --accent-dark:#8f6f40; --line:#e8e0d4;
+    --ok:#2f6f4f; --warn:#c0453b;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;background:var(--bg);color:var(--ink);}
+  header{background:var(--ink);color:#fff;padding:18px 16px;text-align:center;}
+  header h1{margin:0 0 4px;font-size:1.25em;}
+  header p{margin:0;font-size:0.8em;opacity:0.75;}
+  .tabs{display:flex;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10;}
+  .tab-btn{flex:1;padding:14px 8px;text-align:center;background:none;border:none;font-size:0.95em;color:var(--sub);cursor:pointer;border-bottom:3px solid transparent;}
+  .tab-btn.active{color:var(--accent-dark);border-bottom:3px solid var(--accent);font-weight:bold;}
+  main{max-width:820px;margin:0 auto;padding:16px 12px 100px;}
+  .card{background:var(--card);border-radius:10px;padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,0.06);}
+  .card h2{margin:0 0 10px;font-size:1em;color:var(--accent-dark);}
+  .row{display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap;}
+  label{font-size:0.9em;color:var(--sub);}
+  input[type=date], input[type=month], input[type=text]{
+    padding:8px 10px;border:1px solid var(--line);border-radius:6px;font-size:1em;background:#fff;
+  }
+  details.category{border:1px solid var(--line);border-radius:8px;margin-bottom:10px;overflow:hidden;}
+  details.category summary{
+    padding:12px 14px;background:#f5efe6;cursor:pointer;font-weight:bold;font-size:0.92em;
+    list-style:none; display:flex; justify-content:space-between; align-items:center;
+  }
+  details.category summary::-webkit-details-marker{display:none;}
+  summary .count{font-size:0.8em;color:var(--accent-dark);font-weight:normal;}
+  .item-row{
+    display:flex;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--line);
+  }
+  .item-name{flex:1;font-size:0.88em;line-height:1.3;}
+  .qty-group{display:flex;flex-direction:column;align-items:center;width:70px;}
+  .qty-group span{font-size:0.68em;color:var(--sub);margin-bottom:2px;}
+  .qty-group input{width:100%;padding:6px 4px;text-align:center;border:1px solid var(--line);border-radius:6px;}
+  .qty-group input:not([value="0"]):not([value=""]){border-color:var(--accent);background:#fbf3e6;}
+  .free-table{width:100%;border-collapse:collapse;margin-bottom:8px;}
+  .free-table td{padding:4px 4px;}
+  .free-table input, .free-table select{width:100%;padding:6px;border:1px solid var(--line);border-radius:6px;}
+  .btn{
+    display:inline-block;padding:10px 18px;border:none;border-radius:8px;font-size:0.95em;
+    cursor:pointer;font-weight:bold;
+  }
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-secondary{background:#fff;color:var(--accent-dark);border:1px solid var(--accent);}
+  .btn-small{padding:5px 10px;font-size:0.82em;}
+  .fixed-footer{
+    position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);
+    padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;
+  }
+  #sendStatus{font-size:0.85em;}
+  .note{background:#fff6ea;border-left:4px solid var(--accent);padding:8px 12px;font-size:0.82em;border-radius:0 6px 6px 0;margin-bottom:14px;}
+  table.summary{width:100%;border-collapse:collapse;font-size:0.85em;}
+  table.summary th, table.summary td{border:1px solid var(--line);padding:6px 8px;text-align:left;}
+  table.summary th{background:#f5efe6;}
+  table.summary td.num{text-align:right;}
+  @media print{
+    header,.tabs,.fixed-footer,.no-print{display:none !important;}
+    body{background:#fff;}
+    main{padding:0;max-width:100%;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Dulce 発注管理アプリ</h1>
+  <p>2600 Dulce Oro（担当：高力）｜(株)菊地 発注書 デジタル版</p>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="showTab('entry')">📝 発注入力</button>
+  <button class="tab-btn" onclick="showTab('summary')">📊 今月の集計</button>
+</div>
+
+<main>
+
+  <!-- ============ 発注入力タブ ============ -->
+  <section id="entry-tab">
+    <div class="card">
+      <div class="row">
+        <label>発注日</label>
+        <input type="date" id="orderDate">
+        <label style="margin-left:auto;">担当</label>
+        <input type="text" id="staffName" placeholder="例：高力" style="width:110px;">
+      </div>
+    </div>
+
+    <div class="note">
+      商品名の右側にある「材料」「店販」の数量を入力してください（両方使う商品はどちらも入力可）。カテゴリをタップすると開閉します。
+    </div>
+
+    <div class="card">
+      <h2>選択済みの商品（リアルタイム）</h2>
+      <table class="summary" id="selectedTable">
+        <tr><th>商品名</th><th>区分</th><th>数量</th><th>単価（円）</th><th>小計（円）</th></tr>
+        <tbody id="selectedBody"></tbody>
+      </table>
+      <p style="text-align:right;font-weight:bold;margin:8px 0 0;">合計金額：<span id="grandTotal">0 円</span></p>
+    </div>
+
+    <div id="catalogContainer"></div>
+
+    <div class="card">
+      <h2>滝川ビューティーギャラリー</h2>
+      <table class="free-table" id="freeTable">
+        <tr><th style="width:110px;">商品コード</th><th>商品名</th><th style="width:80px;">区分</th><th style="width:60px;">数量</th><th></th></tr>
+      </table>
+      <button class="btn btn-secondary btn-small" onclick="addFreeRow()">＋ 行を追加</button>
+    </div>
+
+    <div class="card">
+      <h2>今日の発注内容（テキスト表示）</h2>
+      <div class="row">
+        <button class="btn btn-secondary btn-small" onclick="showTextSummary()">テキストを作成する</button>
+        <button class="btn btn-secondary btn-small" onclick="copyTextSummary()">コピーする</button>
+      </div>
+      <textarea id="textSummary" rows="10" style="width:100%;margin-top:6px;font-size:0.85em;padding:10px;border:1px solid var(--line);border-radius:8px;" readonly placeholder="上のボタンを押すと、今日入力した内容がここにテキストで表示されます。コピーしてLINEやメールに貼り付けられます。"></textarea>
+    </div>
+  </section>
+
+  <!-- ============ 今月の集計タブ ============ -->
+  <section id="summary-tab" hidden>
+    <div class="card">
+      <div class="row">
+        <label>対象月</label>
+        <input type="month" id="summaryMonth">
+        <button class="btn btn-primary btn-small no-print" onclick="fetchSummary()">集計を取得</button>
+        <button class="btn btn-secondary btn-small no-print" onclick="window.print()">🖨 印刷／PDF保存</button>
+      </div>
+      <div id="summaryStatus" style="font-size:0.85em;color:var(--sub);"></div>
+    </div>
+    <div class="card" id="summaryResult">
+      <p style="color:var(--sub);">「集計を取得」を押すと、この月にオーナーへ送る一覧が表示されます。</p>
+    </div>
+
+    <div class="card">
+      <h2>コピー用テキスト</h2>
+      <div class="row">
+        <button class="btn btn-secondary btn-small no-print" onclick="showSummaryText()">テキストを作る</button>
+        <button class="btn btn-secondary btn-small no-print" onclick="copySummaryText()">コピーする</button>
+      </div>
+      <textarea id="summaryTextArea" rows="10" style="width:100%;margin-top:6px;font-size:0.85em;padding:10px;border:1px solid var(--line);border-radius:8px;" readonly placeholder="「集計を取得」の後にここを押すと、オーナーに送る用のテキストが表示されます"></textarea>
+    </div>
+  </section>
+
+</main>
+
+<div class="fixed-footer" id="entryFooter">
+  <span id="sendStatus"></span>
+  <button class="btn btn-primary" onclick="sendOrder()">この内容を送信する</button>
+</div>
+
+<script>
+/* ▼▼▼ ここをGASの「ウェブアプリのURL」に書き換えてください ▼▼▼ */
+const GAS_URL = "https://script.google.com/macros/s/AKfycbx3w1VhccX18ZmAykHH6bFVx9xeq2LTISXlQdHeVNj6M94j4p9Vpy5Y-ega3lb8npzV/exec";
+/* ▲▲▲ ▲▲▲ ▲▲▲ */
+
+const CATALOG = [
+  { c:"カラー剤（アジアンカラー・クオライン等）", items:[
+    "コスメカール EX 400ml","コスメカールプリズムプラス H 400ml","クオライン 200","クオライン 130","クオライン 250",
+    "クオライン OX 2剤 800g","アジアンカラー 10ピンク","アジアンカラー 10レッド","アジアンカラー 14ライトナー",
+    "アジアンカラー P8 ローリフト","アジアンカラー P6 ローリフト","アジアンカラー OR6 ローリフト","アジアンカラー conc.グレイ"
+  ]},
+  { c:"オアシック・その他薬剤", items:[
+    "オアシック L-N(ライトナチュラル)","オアシック D-N(ダークナチュラル)","オアシック M-MdB(マンダリンブラウン)",
+    "オアシック BLACK","オアシック Clear","マイプクリームバスノニー 1000g","HB ケアテクトカラー C-N2",
+    "アクセスフリー パウダーブリーチ 500g","BLカラー ディープブルー","BLカラー OX-1.5% 2000ml","BLカラー OX-2% 2000mlボトル",
+    "キズキャッチペーパー XL(徳用大)","キズキャッチペーパー L ホワイト","Acidic Water(酸性水)1000ml"
+  ]},
+  { c:"スタイリング剤", items:[
+    "ミィンカール アイロンキーププライマー-02","ミィンカール スムースシアープライマー","ブリズナー ハードジェル10 200g",
+    "シンピュルテオイル マイント50ml","シンピュルテオイル エナジー50ml","ノティオ フューストモイストフォーム200g",
+    "アリミノ CSポイントコンシーラー-M","スタイルクラブ ヘアメイクスプレー","アリミノメン フリーズキープグリース"
+  ]},
+  { c:"バイカルテ FH／CH／UH", items:[
+    "バイカルテ FH 280ml","バイカルテ FH 600ml","バイカルテ FH 1300ml","バイカルテ FH 75mlミニ",
+    "バイカルテ CH 280ml","バイカルテ CH 600ml","バイカルテ CH 1300ml","バイカルテ CH 75mlミニ",
+    "バイカルテ UH 280ml","バイカルテ UH 600ml","バイカルテ UH 1300ml","バイカルテ UH 75mlミニ"
+  ]},
+  { c:"バイカルテ SS／MS／HS", items:[
+    "バイカルテ SS 250g","バイカルテ SS 600g","バイカルテ SS 1300g","バイカルテ SS 60gミニ",
+    "バイカルテ MS 250g","バイカルテ MS 600g","バイカルテ MS 1300g","バイカルテ MS 60gミニ",
+    "バイカルテ HS 250g","バイカルテ HS 600g","バイカルテ HS 1300g","バイカルテ HS 60gミニ"
+  ]},
+  { c:"コタ セラム・クリーム系", items:[
+    "CBミスト①","CYSキット②","CFクリーム③","CRフォーム④","CCクリーム ME⑤","CCクリーム SE⑤","CRクリーム AE④","CCクリーム AE⑤"
+  ]},
+  { c:"エトラス／NiNE", items:[
+    "エトラス ムーブセラム90g","エトラス グリックス100g","エトラス グレイズオイル80ml","NiNE スプレー9 180g","NiNE オイル L(ライト)"
+  ]},
+  { c:"コタ SH（シャンプー）", items:[
+    "コタ1 SH 300ml","コタ1 SH 750ml","コタ1 SH 800ml","コタ3 SH 300ml","コタ3 SH 750ml","コタ3 SH 800ml",
+    "コタ5 SH 300ml","コタ5 SH 750ml","コタ5 SH 800ml","コタ7 SH 300ml","コタ7 SH 750ml","コタ7 SH 800ml",
+    "コタ9 SH 300ml","コタ9 SH 750ml","コタ9 SH 800ml"
+  ]},
+  { c:"コタ TR（トリートメント）", items:[
+    "コタ1 TR 200g","コタ1 TR 750g","コタ1 TR 800g","コタ3 TR 200g","コタ3 TR 750g","コタ3 TR 800g",
+    "コタ5 TR 200g","コタ5 TR 750g","コタ5 TR 800g","コタ7 TR 200g","コタ7 TR 750g","コタ7 TR 800g",
+    "コタ9 TR 200g","コタ9 TR 750g","コタ9 TR 800g"
+  ]},
+  { c:"セラスパ", items:[
+    "セラスパ SH 300ml","セラスパ SH 750ml","セラスパ SH 800ml","セラスパ TR 200ml","セラスパ TR 750ml","セラスパ TR 800ml"
+  ]},
+  { c:"シルキー／フランネル／ベルベット（SH）", items:[
+    "シルキー SH 300ml","シルキー SH 550ml","シルキー SH 600ml","シルキー SH 2000ml",
+    "フランネル SH 300ml","フランネル SH 550ml","フランネル SH 600ml","フランネル SH 2000ml",
+    "ベルベット SH 300ml","ベルベット SH 550ml","ベルベット SH 600ml","ベルベット SH 2000ml"
+  ]},
+  { c:"シルキー／フランネル／ベルベット（TR）", items:[
+    "シルキー TR 300g","シルキー TR 550g","シルキー TR 600g","シルキー TR 2000g",
+    "フランネル TR 300g","フランネル TR 550g","フランネル TR 600g","フランネル TR 2000g",
+    "ベルベット TR 300g","ベルベット TR 550g","ベルベット TR 600g","ベルベット TR 2000g"
+  ]},
+  { c:"その他店販", items:[ "グロウセラム150g","スタイリング B5 200g" ]}
+];
+
+function el(tag, attrs, ...children){
+  const e = document.createElement(tag);
+  for(const k in (attrs||{})) e.setAttribute(k, attrs[k]);
+  children.forEach(c=>{ if(typeof c === "string") e.appendChild(document.createTextNode(c)); else if(c) e.appendChild(c); });
+  return e;
+}
+
+function buildCatalog(){
+  const container = document.getElementById("catalogContainer");
+  CATALOG.forEach((cat, ci)=>{
+    const det = el("details", {class:"category", ...(ci===0?{open:""}:{})});
+    const sum = el("summary", {});
+    sum.appendChild(document.createTextNode(cat.c));
+    const cnt = el("span", {class:"count"}, cat.items.length + "品目");
+    sum.appendChild(cnt);
+    det.appendChild(sum);
+    cat.items.forEach((name, ii)=>{
+      const row = el("div", {class:"item-row"});
+      row.appendChild(el("div", {class:"item-name"}, name));
+      const matQ = el("div", {class:"qty-group"});
+      matQ.appendChild(el("span", {}, "材料"));
+      matQ.appendChild(el("input", {type:"number", min:"0", inputmode:"numeric", "data-cat":ci, "data-item":ii, "data-kind":"材料", value:""}));
+      const retQ = el("div", {class:"qty-group"});
+      retQ.appendChild(el("span", {}, "店販"));
+      retQ.appendChild(el("input", {type:"number", min:"0", inputmode:"numeric", "data-cat":ci, "data-item":ii, "data-kind":"店販", value:""}));
+      row.appendChild(matQ);
+      row.appendChild(retQ);
+      det.appendChild(row);
+    });
+    container.appendChild(det);
+  });
+}
+const priceMap = {};
+
+buildCatalog();
+renderSelectedPanel();
+loadPriceList();
+
+function loadPriceList(){
+  if(GAS_URL.indexOf("http") !== 0) return;
+  fetch(GAS_URL + "?prices=1")
+    .then(r => r.json())
+    .then(list => {
+      list.forEach(p=>{
+        const key = (p.code || "") + "|" + p.name + "|" + p.kind;
+        priceMap[key] = p.price;
+      });
+      renderSelectedPanel();
+    })
+    .catch(()=>{ /* 価格表シートが無い、またはGAS未設定の場合は何もしない */ });
+}
+
+function addFreeRow(){
+  const table = document.getElementById("freeTable");
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input type="text" class="free-code" placeholder="例：BG1234567" maxlength="12"></td>
+    <td><input type="text" class="free-name" placeholder="商品名"></td>
+    <td><select class="free-kind"><option>材料</option><option>店販</option></select></td>
+    <td><input type="number" class="free-qty" min="0" value=""></td>
+    <td><button class="btn btn-secondary btn-small" onclick="this.closest('tr').remove(); renderSelectedPanel();">×</button></td>
+  `;
+  table.appendChild(tr);
+}
+
+function showTab(name){
+  document.getElementById("entry-tab").hidden = name !== "entry";
+  document.getElementById("summary-tab").hidden = name !== "summary";
+  document.getElementById("entryFooter").style.display = name === "entry" ? "flex" : "none";
+  document.querySelectorAll(".tab-btn").forEach((b,i)=>{
+    b.classList.toggle("active", (name==="entry" && i===0) || (name==="summary" && i===1));
+  });
+}
+
+(function initDates(){
+  const d = new Date();
+  document.getElementById("orderDate").value = d.toISOString().slice(0,10);
+  document.getElementById("summaryMonth").value = d.toISOString().slice(0,7);
+})();
+
+function collectItems(){
+  const items = [];
+  document.querySelectorAll('#catalogContainer input[type=number]').forEach(inp=>{
+    const v = parseFloat(inp.value);
+    if(v && v > 0){
+      const ci = inp.dataset.cat, ii = inp.dataset.item;
+      const name = CATALOG[ci].items[ii];
+      items.push({ name, kind: inp.dataset.kind, qty: v });
+    }
+  });
+  document.querySelectorAll('#freeTable .free-name').forEach(nameInp=>{
+    const tr = nameInp.closest('tr');
+    const name = nameInp.value.trim();
+    const code = tr.querySelector('.free-code').value.trim();
+    const qty = parseFloat(tr.querySelector('.free-qty').value);
+    const kind = tr.querySelector('.free-kind').value;
+    if(name && qty > 0) items.push({ name, code, kind, qty, source:"滝川ビューティーギャラリー" });
+  });
+  return items;
+}
+
+function itemKey(item){
+  return (item.code || "") + "|" + item.name + "|" + item.kind;
+}
+
+function renderSelectedPanel(){
+  const items = collectItems();
+  const tbody = document.getElementById("selectedBody");
+  tbody.innerHTML = "";
+  if(items.length === 0){
+    tbody.innerHTML = "<tr><td colspan='5' style='color:var(--sub);text-align:center;'>まだ数量が入力された商品はありません</td></tr>";
+    updateTotal();
+    return;
+  }
+  items.forEach(item=>{
+    const key = itemKey(item);
+    const price = priceMap[key] !== undefined ? priceMap[key] : "";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${item.code ? "["+item.code+"] " : ""}${item.name}</td>
+      <td>${item.kind}</td>
+      <td class="num">${item.qty}</td>
+      <td><input type="number" class="price-input" min="0" data-key="${key}" value="${price}" style="width:80px;text-align:right;"></td>
+      <td class="num subtotal">${price !== "" ? (price*item.qty).toLocaleString() : "-"}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  updateTotal();
+}
+
+function updateTotal(){
+  let total = 0;
+  document.querySelectorAll('#selectedBody .price-input').forEach(inp=>{
+    const key = inp.dataset.key;
+    const tr = inp.closest('tr');
+    const qty = parseFloat(tr.querySelector('td:nth-child(3)').textContent) || 0;
+    const price = parseFloat(inp.value);
+    const subtotalCell = tr.querySelector('.subtotal');
+    if(!isNaN(price) && price >= 0){
+      priceMap[key] = price;
+      const sub = price * qty;
+      subtotalCell.textContent = sub.toLocaleString();
+      total += sub;
+    } else {
+      delete priceMap[key];
+      subtotalCell.textContent = "-";
+    }
+  });
+  document.getElementById("grandTotal").textContent = total.toLocaleString() + " 円";
+}
+
+document.addEventListener('input', function(e){
+  if(e.target.matches('.price-input')){
+    updateTotal();
+  } else if(e.target.matches('#catalogContainer input[type=number], .free-qty, .free-name, .free-code')){
+    renderSelectedPanel();
+  }
+});
+document.addEventListener('change', function(e){
+  if(e.target.matches('.free-kind')){
+    renderSelectedPanel();
+  }
+});
+
+function sendOrder(){
+  const items = collectItems();
+  const status = document.getElementById("sendStatus");
+  if(items.length === 0){
+    status.textContent = "数量が入力された商品がありません";
+    status.style.color = "var(--warn)";
+    return;
+  }
+  const payload = {
+    date: document.getElementById("orderDate").value,
+    staff: document.getElementById("staffName").value,
+    items: items
+  };
+
+  if(GAS_URL.indexOf("http") !== 0){
+    status.textContent = "先にGASのURLを設定してください（送信内容はコンソールに出力しました）";
+    status.style.color = "var(--warn)";
+    console.log("送信予定データ:", payload);
+    return;
+  }
+
+  fetch(GAS_URL, {
+    method: "POST",
+    mode: "no-cors",
+    body: new URLSearchParams({ data: JSON.stringify(payload) })
+  });
+
+  status.textContent = "送信しました（" + items.length + "品目）";
+  status.style.color = "var(--ok)";
+}
+
+function buildTextSummary(){
+  const date = document.getElementById("orderDate").value;
+  const staff = document.getElementById("staffName").value;
+  const items = collectItems();
+
+  let lines = ["今日の発注内容（" + date + "）"];
+  if(staff) lines.push("担当：" + staff);
+  lines.push("");
+
+  if(items.length === 0){
+    lines.push("入力された商品がありません。");
+    return lines.join("\n");
+  }
+
+  const catalogItems = items.filter(i => !i.source);
+  const bgItems = items.filter(i => i.source);
+
+  ["材料","店販"].forEach(kind=>{
+    const group = catalogItems.filter(i => i.kind === kind);
+    if(group.length){
+      lines.push("【" + kind + "】");
+      group.forEach(i => lines.push("・" + i.name + " ×" + i.qty));
+      lines.push("");
+    }
+  });
+
+  if(bgItems.length){
+    lines.push("【滝川ビューティーギャラリー】");
+    bgItems.forEach(i => lines.push("・" + (i.code ? "[" + i.code + "] " : "") + i.name + " ×" + i.qty + "（" + i.kind + "）"));
+  }
+
+  return lines.join("\n").trim();
+}
+
+function showTextSummary(){
+  document.getElementById("textSummary").value = buildTextSummary();
+}
+
+function copyTextSummary(){
+  const ta = document.getElementById("textSummary");
+  ta.value = buildTextSummary();
+  ta.select();
+  const status = document.getElementById("sendStatus");
+  navigator.clipboard.writeText(ta.value).then(()=>{
+    status.textContent = "テキストをコピーしました";
+    status.style.color = "var(--ok)";
+  }).catch(()=>{
+    document.execCommand("copy");
+    status.textContent = "テキストをコピーしました";
+    status.style.color = "var(--ok)";
+  });
+}
+
+function fetchSummary(){
+  const month = document.getElementById("summaryMonth").value;
+  const status = document.getElementById("summaryStatus");
+  const result = document.getElementById("summaryResult");
+
+  if(GAS_URL.indexOf("http") !== 0){
+    status.textContent = "先にGASのURLを設定してください";
+    status.style.color = "var(--warn)";
+    return;
+  }
+
+  status.textContent = "取得中...";
+  fetch(GAS_URL + "?month=" + encodeURIComponent(month))
+    .then(r => r.json())
+    .then(data => {
+      status.textContent = "";
+      renderSummary(month, data);
+    })
+    .catch(err => {
+      status.textContent = "取得に失敗しました（GAS側のCORS設定・doGetの実装を確認してください）";
+      status.style.color = "var(--warn)";
+    });
+}
+
+let lastSummaryMonth = "";
+let lastSummaryRows = [];
+
+function renderSummary(month, rows){
+  lastSummaryMonth = month;
+  lastSummaryRows = rows || [];
+  const result = document.getElementById("summaryResult");
+  if(!rows || rows.length === 0){
+    result.innerHTML = "<p>" + month + " のデータはまだありません。</p>";
+    return;
+  }
+  let html = "<h2>" + month + " 発注集計（2600 Dulce Oro）</h2>";
+  html += "<table class='summary'><tr><th>商品名</th><th>区分</th><th>合計数量</th></tr>";
+  rows.forEach(r=>{
+    const label = r.code ? "[" + r.code + "] " + r.name : r.name;
+    html += `<tr><td>${label}</td><td>${r.kind}</td><td class="num">${r.total}</td></tr>`;
+  });
+  html += "</table>";
+  result.innerHTML = html;
+}
+
+function buildSummaryText(){
+  if(lastSummaryRows.length === 0){
+    return (lastSummaryMonth || "") + " のデータはまだありません。";
+  }
+  const catalogRows = lastSummaryRows.filter(r => !r.source);
+  const bgRows = lastSummaryRows.filter(r => r.source);
+
+  let lines = [lastSummaryMonth + " 発注集計（2600 Dulce Oro）"];
+  lines.push("");
+
+  ["材料","店販"].forEach(kind=>{
+    const group = catalogRows.filter(r => r.kind === kind);
+    if(group.length){
+      lines.push("【" + kind + "】");
+      group.forEach(r => lines.push("・" + r.name + " 合計" + r.total));
+      lines.push("");
+    }
+  });
+
+  if(bgRows.length){
+    lines.push("【滝川ビューティーギャラリー】");
+    bgRows.forEach(r => lines.push("・" + (r.code ? "[" + r.code + "] " : "") + r.name + " 合計" + r.total + "（" + r.kind + "）"));
+  }
+
+  return lines.join("\n").trim();
+}
+
+function showSummaryText(){
+  document.getElementById("summaryTextArea").value = buildSummaryText();
+}
+
+function copySummaryText(){
+  const ta = document.getElementById("summaryTextArea");
+  ta.value = buildSummaryText();
+  ta.select();
+  const status = document.getElementById("summaryStatus");
+  navigator.clipboard.writeText(ta.value).then(()=>{
+    status.textContent = "コピーしました";
+    status.style.color = "var(--ok)";
+  }).catch(()=>{
+    document.execCommand("copy");
+    status.textContent = "コピーしました";
+    status.style.color = "var(--ok)";
+  });
+}
+</script>
+
+</body>
+</html>
