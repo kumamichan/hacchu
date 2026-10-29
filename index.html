@@ -77,10 +77,16 @@
   .csub{text-align:right;font-weight:bold;font-size:0.92em;border-top:1px solid var(--line);padding-top:8px;}
   .tag{display:inline-block;font-size:0.72em;padding:1px 8px;border-radius:10px;margin-right:6px;background:#eef4ee;color:#2e5e3d;vertical-align:1px;}
   .tag.retail{background:#f3e9f7;color:#6a3d80;}
+  .tag.bg{background:#e7eef7;color:#2f5d8a;}
   .code{color:var(--sub);font-size:0.9em;}
   .totals{margin-top:6px;padding-top:10px;border-top:2px solid var(--line);}
   .totals .grand{font-size:1.1em;font-weight:bold;text-align:right;}
   .totals .sub{font-size:0.85em;color:var(--sub);text-align:right;margin-top:3px;}
+
+  .tblock{margin-top:14px;}
+  .tblock-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;}
+  .tblock-head b{color:var(--accent-dark);}
+  .tblock.all .tblock-head b{color:var(--sub);}
 
   .field{margin-bottom:12px;}
   .field label{display:block;margin-bottom:4px;}
@@ -153,12 +159,14 @@
       <h2>滝川ビューティーギャラリー</h2>
       <div class="bg-grid">
         <input type="text" id="bgCode" placeholder="商品コード（例：BG1234567）" maxlength="12">
-        <select id="bgKind"><option>材料</option><option>店販</option></select>
+        <select id="bgKind"><option value="材料">区分：材料</option><option value="店販">区分：店販</option></select>
         <input type="text" id="bgName" class="full" placeholder="商品名">
         <input type="number" id="bgQty" inputmode="numeric" min="1" placeholder="数量">
         <input type="number" id="bgPrice" inputmode="numeric" min="0" placeholder="単価（任意）">
+        <select id="bgSupplier" class="full"><option value="きくや">発注先：きくや</option><option value="菊地">発注先：菊地</option></select>
         <button class="btn btn-secondary full" onclick="addBg()">カートに入れる</button>
       </div>
+      <p class="muted" style="margin:8px 0 0;">きくや・菊地のどちらかに発注します。注文の文では「滝川ビューティーギャラリー」として分かれて入ります。</p>
     </div>
   </section>
 
@@ -175,11 +183,11 @@
 
     <div class="card">
       <h2>発注内容の確認・保存</h2>
-      <div class="row">
+      <div class="row" style="margin-bottom:0;">
         <button class="btn btn-secondary btn-small" onclick="showTextSummary()">テキストを作成する</button>
-        <button class="btn btn-secondary btn-small" onclick="copyTextSummary()">全体をコピーする</button>
+        <span class="muted">発注先ごとに、別々のテキストができます</span>
       </div>
-      <textarea id="textSummary" rows="10" readonly placeholder="「テキストを作成する」を押すと、カートの内容がここにテキストで表示されます。発注先ごとにコピーしたいときは、カートの各発注先にあるボタンを使ってください。"></textarea>
+      <div id="textBlocks"></div>
       <div class="row" style="margin-top:12px;">
         <button class="btn btn-primary" id="saveBtn" onclick="saveOrder()">スプレッドシートに保存する</button>
         <button class="btn btn-secondary btn-small" onclick="askClearCart()">カートを空にする</button>
@@ -273,7 +281,7 @@ const GAS_URL = "https://script.google.com/macros/s/AKfycby-e--y1ReGBKFFXV8ge_Gc
 /* ▲▲▲ ▲▲▲ ▲▲▲ */
 
 const SUPPLIER_NOTES = { "きくや": "納期2日以上", "菊地": "当日・翌日" };
-const BG_SUPPLIER = "滝川ビューティーギャラリー";
+const BG_NAME = "滝川ビューティーギャラリー";   // 取扱元（発注先は、きくや／菊地のどちらかを選ぶ）
 const KINDS = ["材料", "店販"];
 
 let SUPPLIERS = [];   // 商品マスタの発注先（スプレッドシートの列）
@@ -296,7 +304,7 @@ function setStatus(el, msg, ok){
 }
 function supplierRank(s){
   const i = SUPPLIERS.indexOf(s);
-  return i >= 0 ? i : (s === BG_SUPPLIER ? 900 : 500);
+  return i >= 0 ? i : (s === BG_NAME ? 900 : 500);
 }
 
 /* ---------- タブ ---------- */
@@ -454,7 +462,7 @@ function onOrder(i, supplier){
   }
 }
 
-function lineKey(l){ return [l.supplier, l.kind, l.code || "", l.name].join("|"); }
+function lineKey(l){ return [l.supplier, l.source || "", l.kind, l.code || "", l.name].join("|"); }
 
 function addToCart(l){
   l.key = lineKey(l);
@@ -469,10 +477,11 @@ function addBg(){
   const qty = parseInt($("bgQty").value, 10);
   const pr = parseFloat($("bgPrice").value);
   if(!name || !(qty > 0)){ toast("商品名と数量を入力してください"); return; }
-  addToCart({ supplier: BG_SUPPLIER, kind: $("bgKind").value, code: code, name: name, qty: qty,
+  const supplier = $("bgSupplier").value;
+  addToCart({ supplier: supplier, source: BG_NAME, kind: $("bgKind").value, code: code, name: name, qty: qty,
               price: isNaN(pr) ? null : pr, minPrice: null, minSupplier: null });
   ["bgCode", "bgName", "bgQty", "bgPrice"].forEach(id => { $(id).value = ""; });
-  toast("カートに入れました：" + name + " ×" + qty);
+  toast("カートに入れました：" + name + " ×" + qty + "（" + supplier + "／滝川）");
 }
 
 /* ---------- カートの集計 ---------- */
@@ -518,6 +527,7 @@ function lineHtml(l){
     ? '<span class="extra">※' + esc(l.minSupplier) + "より＋" + yen((l.price - l.minPrice) * l.qty) + "円</span>" : "";
   return '<div class="cl"><div class="cl-main"><div class="cl-name">'
     + '<span class="tag ' + (l.kind === "店販" ? "retail" : "") + '">' + l.kind + "</span>"
+    + (l.source ? '<span class="tag bg">滝川</span>' : "")
     + (l.code ? '<span class="code">[' + esc(l.code) + "]</span> " : "") + esc(l.name) + "</div>"
     + '<div class="cl-sub">' + unit
     + '<span class="stepper"><button data-act="minus" data-key="' + key + '">−</button>'
@@ -617,15 +627,23 @@ function buildText(onlySupplier){
     out.push("カートに商品がありません。");
     return out.join("\n");
   }
+  const lineText = (l, withKind) => "・" + (l.code ? "[" + l.code + "] " : "") + l.name + " ×" + l.qty
+    + (withKind ? "（" + l.kind + "）" : "")
+    + (l.price == null ? "" : "　" + yen(l.price) + "円 = " + yen(l.price * l.qty) + "円");
   groups.forEach(g => {
     if(!onlySupplier) out.push("【" + g.supplier + "】");
+    const normal = g.lines.filter(l => !l.source);
+    const bg = g.lines.filter(l => l.source);
     KINDS.forEach(k => {
-      const ls = g.lines.filter(l => l.kind === k);
+      const ls = normal.filter(l => l.kind === k);
       if(!ls.length) return;
       out.push("（" + k + "）");
-      ls.forEach(l => out.push("・" + (l.code ? "[" + l.code + "] " : "") + l.name + " ×" + l.qty
-        + (l.price == null ? "" : "　" + yen(l.price) + "円 = " + yen(l.price * l.qty) + "円")));
+      ls.forEach(l => out.push(lineText(l, false)));
     });
+    if(bg.length){
+      out.push("（" + BG_NAME + "）");
+      bg.forEach(l => out.push(lineText(l, true)));
+    }
     out.push("小計 " + subText(g));
     out.push("");
   });
@@ -636,12 +654,33 @@ function buildText(onlySupplier){
   return out.join("\n").trim();
 }
 
-function showTextSummary(){ $("textSummary").value = buildText(); }
-function copyTextSummary(){
-  const text = buildText();
-  $("textSummary").value = text;
-  copyToClipboard(text).then(ok => setStatus($("cartStatus"), ok ? "テキストをコピーしました" : "コピーできませんでした", ok));
+function textBlockHtml(title, text, cls){
+  const rows = Math.min(16, text.split("\n").length + 1);
+  return '<div class="tblock ' + cls + '"><div class="tblock-head"><b>' + esc(title) + "</b>"
+    + '<button class="btn btn-secondary btn-small" data-act="copyblock" data-title="' + esc(title) + '">コピー</button></div>'
+    + '<textarea readonly rows="' + rows + '">' + esc(text) + "</textarea></div>";
 }
+
+// 発注先ごとに別々のテキスト（かもじ用・きくや用・菊地用…）＋ 確認用の全体まとめ
+function renderTextBlocks(){
+  const box = $("textBlocks");
+  const t = cartTotals();
+  if(!t.groups.length){
+    box.innerHTML = '<p class="muted" style="margin-top:10px;">カートに商品がありません。</p>';
+    return;
+  }
+  box.innerHTML = t.groups.map(g => textBlockHtml(g.supplier + "用", buildText(g.supplier), "sup")).join("")
+    + textBlockHtml("全体のまとめ（確認用）", buildText(), "all");
+}
+function showTextSummary(){ renderTextBlocks(); }
+
+$("textBlocks").addEventListener("click", e => {
+  const b = e.target.closest("button[data-act='copyblock']");
+  if(!b) return;
+  const text = b.closest(".tblock").querySelector("textarea").value;
+  copyToClipboard(text).then(ok =>
+    setStatus($("cartStatus"), ok ? b.dataset.title + "をコピーしました" : "コピーできませんでした", ok));
+});
 
 /* ---------- スプレッドシートに保存 ---------- */
 function saveOrder(){
@@ -653,17 +692,17 @@ function saveOrder(){
     action: "order",
     date: $("orderDate").value,
     store: $("storeSelect").value,
-    items: CART.map(l => ({ supplier: l.supplier, kind: l.kind, code: l.code, name: l.name, qty: l.qty, price: l.price }))
+    items: CART.map(l => ({ supplier: l.supplier, source: l.source || "", kind: l.kind, code: l.code, name: l.name, qty: l.qty, price: l.price }))
   };
   const n = CART.length;
-  $("textSummary").value = buildText();   // 保存後もコピーできるように、先にテキストを残す
+  renderTextBlocks();   // 保存後もコピーできるように、先に発注先ごとのテキストを残す
   const btn = $("saveBtn");
   btn.disabled = true;
   setStatus(st, "保存中…", true);
   fetch(GAS_URL, { method: "POST", mode: "no-cors", body: new URLSearchParams({ data: JSON.stringify(payload) }) })
     .then(() => {
       clearCart();
-      setStatus(st, "スプレッドシートに保存しました（" + n + "品目）。テキストは上に残しています", true);
+      setStatus(st, "スプレッドシートに保存しました（" + n + "品目）。発注先ごとのテキストは上に残しています", true);
     })
     .catch(() => setStatus(st, "保存できませんでした。通信を確認して、もう一度押してください（カートはそのまま残っています）", false))
     .then(() => { btn.disabled = false; });
@@ -756,7 +795,7 @@ function summaryModel(rows){
     by[s].sub += Number(r.amount) || 0;
   });
   const groups = order.map(s => by[s]).sort((a, b) => supplierRank(a.supplier) - supplierRank(b.supplier));
-  groups.forEach(g => g.rows.sort((a, b) => (KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind)) || String(a.name).localeCompare(String(b.name), "ja")));
+  groups.forEach(g => g.rows.sort((a, b) => ((a.source ? 1 : 0) - (b.source ? 1 : 0)) || (KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind)) || String(a.name).localeCompare(String(b.name), "ja")));
   let total = 0, missing = 0;
   const byKind = { "材料": 0, "店販": 0 };
   rows.forEach(r => {
@@ -780,7 +819,7 @@ function renderSummary(month, store, rows){
   m.groups.forEach(g => {
     html += '<h3 class="sup-title">【' + esc(g.supplier) + "】</h3>"
       + '<table class="plain"><tr><th>商品名</th><th>区分</th><th>数量</th><th>金額</th></tr>'
-      + g.rows.map(r => "<tr><td>" + (r.code ? "[" + esc(r.code) + "] " : "") + esc(r.name) + "</td><td>" + esc(r.kind)
+      + g.rows.map(r => "<tr><td>" + (r.code ? "[" + esc(r.code) + "] " : "") + esc(r.name) + (r.source ? ' <span class="tag bg">滝川</span>' : "") + "</td><td>" + esc(r.kind)
         + '</td><td class="num">' + r.qty + '</td><td class="num">' + rowAmountCell(r) + "</td></tr>").join("")
       + '<tr class="subrow"><td colspan="3">小計</td><td class="num">' + yen(g.sub) + "</td></tr></table>";
   });
@@ -796,12 +835,19 @@ function buildSummaryText(){
   const out = [storeLabel(s.store), s.month + " 発注集計（Dulce）", ""];
   m.groups.forEach(g => {
     out.push("【" + g.supplier + "】");
+    const rowText = (r, withKind) => "・" + (r.code ? "[" + r.code + "] " : "") + r.name + " 合計" + r.qty + "個" + (withKind ? "（" + r.kind + "）" : "")
+      + (r.noPrice ? ((Number(r.amount) || 0) > 0 ? " = " + yen(r.amount) + "円（一部単価なし）" : "（単価なし）") : " = " + yen(Number(r.amount) || 0) + "円");
     KINDS.forEach(k => {
-      const rs = g.rows.filter(r => r.kind === k);
+      const rs = g.rows.filter(r => !r.source && r.kind === k);
       if(!rs.length) return;
       out.push("（" + k + "）");
-      rs.forEach(r => out.push("・" + (r.code ? "[" + r.code + "] " : "") + r.name + " 合計" + r.qty + "個" + (r.noPrice ? ((Number(r.amount) || 0) > 0 ? " = " + yen(r.amount) + "円（一部単価なし）" : "（単価なし）") : " = " + yen(Number(r.amount) || 0) + "円")));
+      rs.forEach(r => out.push(rowText(r, false)));
     });
+    const bgRows = g.rows.filter(r => r.source);
+    if(bgRows.length){
+      out.push("（" + BG_NAME + "）");
+      bgRows.forEach(r => out.push(rowText(r, true)));
+    }
     out.push("小計 " + yen(g.sub) + "円");
     out.push("");
   });
